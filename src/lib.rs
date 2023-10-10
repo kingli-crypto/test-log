@@ -143,8 +143,43 @@ fn expand_tracing_init() -> Tokens {
       let subscriber = ::tracing_subscriber::FmtSubscriber::builder()
         .with_env_filter(::tracing_subscriber::EnvFilter::from_default_env())
         .with_span_events(__internal_event_filter)
-        .with_test_writer()
-        .finish();
+        .with_test_writer();
+
+      // Enable ANSI flag when suitable (now always)
+      // And retrieve the flags from environment variables in order, RUST_LOG_COLOR, NO_COLOR
+      // Attempt to parse
+      let subscriber = {
+        let __ansi =
+          match (
+              ::std::env::var("RUST_LOG_COLOR"),
+              ::std::env::var("NO_COLOR")
+            ) {
+              // RUST_LOG_COLOR is defined
+              // Accepts "always" or "never"
+              (Ok(color), _) => {
+                match color.to_lowercase().trim() {
+                  "always" => true,
+                  "never" => false,
+                  _ => panic!("test-log: RUST_LOG_COLOR must be one of 'always', 'never'")
+                }
+              },
+              // NO_COLOR is defined
+              // false or 0 are handled as disable
+              // other values are positive
+              (_, Ok(no_color)) => {
+                match no_color.to_lowercase().trim() {
+                  "false" | "0" => false,
+                  _ => true
+                }
+              },
+              // Default to enable ANSI
+              (_, _) => true,
+          };
+
+        subscriber.with_ansi(__ansi)
+      };
+
+      let subscriber = subscriber.finish();
       let _ = ::tracing::subscriber::set_global_default(subscriber);
     }
   }
